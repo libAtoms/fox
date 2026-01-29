@@ -77,4 +77,5 @@ fox_F90_sources = [
 
 fox = library('fox',
   fox_F90_sources,
+  install: true,
   )
