@@ -38,6 +38,15 @@ module m_common_error
     module procedure FoX_fatal_base
   end interface
 
+  abstract interface
+    subroutine FoX_error_handler_iface(msg)
+      character(len=*), intent(in) :: msg
+    end subroutine FoX_error_handler_iface
+  end interface
+
+  procedure(FoX_error_handler_iface), pointer, save :: &
+    FoX_error_handler_ptr => null()
+
   public :: ERR_NULL
   public :: ERR_WARNING
   public :: ERR_ERROR
@@ -56,6 +65,8 @@ module m_common_error
   public :: FoX_warning_base
   public :: FoX_error_base
   public :: FoX_fatal_base
+
+  public :: FoX_set_error_handler
 
   public :: add_error
   public :: in_error
@@ -88,13 +99,20 @@ contains
 
   subroutine FoX_error_base(msg)
     ! Emit error message and stop.
-    ! No clean up is done here, but this can
-    ! be overridden to include clean-up routines
+    ! If a custom handler has been registered via FoX_set_error_handler,
+    ! delegate to it instead. The handler is expected to terminate
+    ! execution (e.g. by calling system_abort) -- if it returns we fall
+    ! through to the historical stop behaviour so callers always see a
+    ! terminated process, never a continuation past a parse error.
     character(len=*), intent(in) :: msg
 
     if (errors_are_fatal) then
         write(0,'(a)') 'FoX error made fatal'
         call FoX_fatal_base(msg)
+    endif
+
+    if (associated(FoX_error_handler_ptr)) then
+        call FoX_error_handler_ptr(msg)
     endif
 
     write(0,'(a)') 'ERROR(FoX)'
@@ -104,6 +122,11 @@ contains
     stop
 
   end subroutine FoX_error_base
+
+  subroutine FoX_set_error_handler(handler)
+    procedure(FoX_error_handler_iface) :: handler
+    FoX_error_handler_ptr => handler
+  end subroutine FoX_set_error_handler
 
   subroutine FoX_fatal_base(msg)
     !Emit error message and abort with coredump.
